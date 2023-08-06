@@ -1,0 +1,78 @@
+
+ 0.001
+*** 120sec train time - 15 networks - XOR ***
+H: 0.86 | C:0.76 | S: 30551 - Width: 1 - Num Neurons: 1
+H: 0.59 | C:0.54 | S: 29938 - Width: 1 - Num Neurons: 2
+H: 0.60 | C:0.51 | S: 28947 - Width: 1 - Num Neurons: 3
+H: 0.60 | C:0.52 | S: 29335 - Width: 1 - Num Neurons: 4
+H: 0.62 | C:0.50 | S: 30071 - Width: 1 - Num Neurons: 5
+H: 0.84 | C:0.77 | S: 31132 - Width: 2 - Num Neurons: 1
+H: 0.84 | C:0.75 | S: 29275 - Width: 2 - Num Neurons: 2
+H: 0.84 | C:0.77 | S: 30928 - Width: 2 - Num Neurons: 3
+H: 0.85 | C:0.79 | S: 30423 - Width: 2 - Num Neurons: 4
+H: 0.61 | C:0.50 | S: 34054 - Width: 2 - Num Neurons: 5
+H: 0.83 | C:0.74 | S: 30660 - Width: 3 - Num Neurons: 1
+H: 0.83 | C:0.74 | S: 29415 - Width: 3 - Num Neurons: 2
+H: 0.61 | C:0.51 | S: 28419 - Width: 3 - Num Neurons: 3
+H: 0.84 | C:0.74 | S: 29953 - Width: 3 - Num Neurons: 4
+H: 0.87 | C:0.76 | S: 22661 - Width: 3 - Num Neurons: 5
+
+0.005
+*** 120sec train time - 15 networks - XOR ***
+H: 0.62 | C:0.48 | S: 29679 - Width: 1 - Num Neurons: 1
+H: 0.60 | C:0.53 | S: 29760 - Width: 1 - Num Neurons: 2
+H: 0.87 | C:0.80 | S: 27847 - Width: 1 - Num Neurons: 3
+H: 0.59 | C:0.51 | S: 28962 - Width: 1 - Num Neurons: 4
+H: 0.84 | C:0.75 | S: 30556 - Width: 1 - Num Neurons: 5
+H: 0.85 | C:0.75 | S: 32581 - Width: 2 - Num Neurons: 1
+H: 0.61 | C:0.49 | S: 29561 - Width: 2 - Num Neurons: 2
+H: 0.60 | C:0.45 | S: 30694 - Width: 2 - Num Neurons: 3
+H: 0.60 | C:0.51 | S: 28647 - Width: 2 - Num Neurons: 4
+H: 0.85 | C:0.77 | S: 33667 - Width: 2 - Num Neurons: 5
+H: 0.84 | C:0.73 | S: 30555 - Width: 3 - Num Neurons: 1
+H: 0.83 | C:0.70 | S: 29905 - Width: 3 - Num Neurons: 2
+H: 0.60 | C:0.52 | S: 30644 - Width: 3 - Num Neurons: 3
+H: 0.60 | C:0.54 | S: 32088 - Width: 3 - Num Neurons: 4
+H: 0.60 | C:0.49 | S: 23059 - Width: 3 - Num Neurons: 5
+
+
+0.01
+*** 120sec train time - 15 networks - XOR ***
+H: 0.60 | C:0.49 | S: 30292 - Width: 1 - Num Neurons: 1
+H: 0.85 | C:0.73 | S: 30463 - Width: 1 - Num Neurons: 2
+H: 0.59 | C:0.51 | S: 29028 - Width: 1 - Num Neurons: 3
+H: 0.60 | C:0.52 | S: 29241 - Width: 1 - Num Neurons: 4
+H: 0.61 | C:0.54 | S: 30212 - Width: 1 - Num Neurons: 5
+H: 0.84 | C:0.73 | S: 30560 - Width: 2 - Num Neurons: 1
+H: 0.84 | C:0.72 | S: 28873 - Width: 2 - Num Neurons: 2
+H: 0.60 | C:0.47 | S: 31193 - Width: 2 - Num Neurons: 3
+H: 0.60 | C:0.51 | S: 29825 - Width: 2 - Num Neurons: 4
+H: 0.61 | C:0.52 | S: 32422 - Width: 2 - Num Neurons: 5
+H: 0.85 | C:0.73 | S: 30129 - Width: 3 - Num Neurons: 1
+H: 0.83 | C:0.75 | S: 29629 - Width: 3 - Num Neurons: 2
+H: 0.60 | C:0.49 | S: 28483 - Width: 3 - Num Neurons: 3
+H: 0.60 | C:0.46 | S: 30521 - Width: 3 - Num Neurons: 4
+H: 0.84 | C:0.76 | S: 21591 - Width: 3 - Num Neurons: 5
+
+0.0001
+*** 120sec train time - 15 networks - XOR ***
+H: 0.61 | C:0.51 | S: 49244 - Width: 1 - Num Neurons: 1
+H: 0.61 | C:0.47 | S: 53153 - Width: 1 - Num Neurons: 2
+H: 0.62 | C:0.48 | S: 53447 - Width: 1 - Num Neurons: 3
+H: 0.84 | C:0.78 | S: 53138 - Width: 1 - Num Neurons: 4
+H: 0.60 | C:0.53 | S: 52643 - Width: 1 - Num Neurons: 5
+H: 0.62 | C:0.50 | S: 52624 - Width: 2 - Num Neurons: 1
+H: 0.62 | C:0.56 | S: 53711 - Width: 2 - Num Neurons: 2
+H: 0.61 | C:0.55 | S: 50397 - Width: 2 - Num Neurons: 3
+H: 0.63 | C:0.48 | S: 41625 - Width: 2 - Num Neurons: 4
+H: 0.61 | C:0.56 | S: 34332 - Width: 2 - Num Neurons: 5
+H: 0.60 | C:0.51 | S: 54586 - Width: 3 - Num Neurons: 1
+H: 0.60 | C:0.50 | S: 52752 - Width: 3 - Num Neurons: 2
+H: 0.59 | C:0.51 | S: 41728 - Width: 3 - Num Neurons: 3
+H: 0.59 | C:0.48 | S: 32069 - Width: 3 - Num Neurons: 4
+H: 0.61 | C:0.50 | S: 23862 - Width: 3 - Num Neurons: 5
+
+
+
+ 
+*** 120sec train time - 15 networks - XOR ***
