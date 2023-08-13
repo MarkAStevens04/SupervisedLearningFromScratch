@@ -12,8 +12,15 @@
         - save the network when it gets a higher accuracy, & repeat
     - click a neuron to change its value
     - when cost is high, steps should be big. When cost is low, steps should be small
+    -
+    - GPU optimizations:
+            Network doesn't change until after change direction of all neurons & connections is determined.
+            Therefor, we can get the current weights & activations of all neurons in the GPU first
+            Then, distribute the work of re-running the network for each connection & neuron to
+                different parts of the GPU.
 """
 
+# pip install torch torchvision torchaudio -f https://download.pytorch.org/whl/cu118/torch_stable.html
 from os import path
 import sys
 sys.path.append(path.abspath('C:/Users/doyle/OneDrive/Desktop/Programming/Python/personalUtils'))
@@ -23,6 +30,7 @@ import pygame
 import time
 import ctypes
 import numpy as np
+import torch
 import random
 history = open('tweaks.txt', 'r+')
 ctypes.windll.user32.SetProcessDPIAware()
@@ -80,17 +88,34 @@ stepSizeConstant = 2
 # Maximum difference between desired result and actual result to be considered a correct identification.
 # ex: 0.1 means that an actual result of 0.95 with desired 1 is correct, while a: 0.89 e: 1 is incorrect
 # note: value shouldn't be above 0.5. a: 0.500000...1, e:1 should be lowest accuracy considered correct
-ACCURACY_THRESHHOLD = 0.1
+# ACCURACY_THRESHHOLD = 0.1
+ACCURACY_THRESHHOLD = 0.001
 
 # NOTE about DEBUG: holding mouse down is fast, pressing space is slow
 debug = DebugObject()
 debug.toggle_print(False)
 debug.add_print_categories('u')
-DEBUG = False
+debug.add_print_categories('GPU')
+DEBUG = True
 COST_PRECISION = 12
 CONNECTION_WEIGHT_SCALE_FACTOR = 1
 NEURON_WEIGHT_SCALE_FACTOR = 1
 
+# Affirm GPU acceleration
+if torch.cuda.is_available():
+    device = torch.device("cuda")
+else:
+    device = torch.device("cpu")
+
+print('using', device, 'device')
+
+# compare times!
+tCPU = Timer()
+tGPU = Timer()
+tMisc = Timer()
+tCPU.changeSampleSize(9)
+tGPU.changeSampleSize(9)
+tMisc.changeSampleSize(9)
 
 def findColor(color_list, index) -> tuple[int, int, int]:
     """
@@ -150,7 +175,8 @@ def activationFunction(activation: float) -> float:
     For right now, we're going to use a ReLU function.
     (if the activation is negative, return 0. Otherwise, return the original value)
     """
-    to_return = sigmoid(activation*10)
+    # to_return = sigmoid(activation*10)
+    to_return = sigmoid(activation)
     # print('orig: ', round(activation, 2), 'sigm: ', round(to_return, 2))
     # return min(max(0, activation), 1)
     return to_return
@@ -219,6 +245,10 @@ class Network:
         self._highAcc = 0
         self._steps = 0
         self._costThreshhold = MIN_COST_THRESHHOLD
+        self._biasTensorRepr = torch.zeros((num_hidden_layers + 2), max(input_width, output_width, hidden_width))
+
+        # for activations, better to have activations in one layer occupy a single row. Makes matrix mult easier
+        self._activationTensorRepr = torch.zeros((num_hidden_layers + 2), max(input_width, output_width, hidden_width))
 
         # outline each layer of the network
         for i in range(self.num_hidden_layers):
@@ -253,6 +283,11 @@ class Network:
                     conA = Connection(sNeuron, eNeuron)
                     # sNeuron.addPostConnection(conA)
                     # eNeuron.addPreConnection(conA)
+
+        # update tensor representations of neurons
+        for i in range(len(self._layers) - 1):
+            for sNeuron in self._layers[i+1]:
+                sNeuron.buildTensor()
 
     def _calcNeuronPosition(self, layer_index) -> None:
         """
@@ -313,6 +348,8 @@ class Network:
         for data_index in range(len(in1)):
             self._layers[0][data_index]._activation = in1[data_index]
 
+        self._buildTensorRepr()
+
     def _runNetwork(self) -> None:
         """
         updates activations of all neurons in all layers
@@ -322,9 +359,11 @@ class Network:
         input has already been called
             if not, this function will just produce meaningless results
 
-        For this function, we want a ReLU on the hidden neurons, and sigmoid on the last neurons.
+        For this function, sigmoid on all neurons.
         This lets the weights have high values, while our output will be between 0 and 1.
         """
+        tCPU.start()
+
         for layer_index in range(1, len(self._layers)):
             for neuron in self._layers[layer_index]:
 
@@ -335,10 +374,14 @@ class Network:
                 act += neuron._bias
                 # print('pre: ', round(act, 3), 'post: ', round(activationFunction(act), 3))
                 act = activationFunction(act)
+
                 # act += neuron._bias
 
 
                 neuron.changeActivation(act)
+
+        tCPU.end()
+        # self._runNetworkTensor()
         #     print('went inside')
         #
         # print('going through')
@@ -387,6 +430,122 @@ class Network:
                     neuron = self._layers[layer_index][neuron_index]
                     neuron.updateBias()
 
+    def _buildTensorRepr(self) -> None:
+        """
+        Creates the accurate tensor representation of the network.
+
+        = Pre-condition =
+        Input method must already have been called
+        :return:
+        """
+
+        for layIndex in range(len(self._layers)):
+            for neurIndex in range(len(self._layers[layIndex])):
+                neuron = self._layers[layIndex][neurIndex]
+                self._activationTensorRepr[layIndex][neurIndex] = neuron._activation
+                self._biasTensorRepr[layIndex][neurIndex] = neuron._bias
+
+    def _updateBiasRepr(self) -> None:
+        """
+        updates the bias representation of the network
+        :return:
+        """
+        for layIndex in range(len(self._layers)):
+            for neurIndex in range(len(self._layers[layIndex])):
+                neuron = self._layers[layIndex][neurIndex]
+                # note that activation and bias have opposite dimensions, and are thus called accordingly
+                self._biasTensorRepr[layIndex][neurIndex] = neuron._bias
+
+    def _runNetworkTensor(self) -> None:
+        """
+        Updates the tensor representation of the network
+        For every layer, starting on the layer after input layer,
+        calculate the activations of the neurons by performing a matrix multiplication
+        of the previous layer's activations with the corresponding connections.
+
+        Activations first, weights second.
+
+        Activations are a 1xn matrix.
+        Weights are an nxm matrix.
+
+        n is number of neurons in previous layer. m is number of neurons in current layer.
+        :return:
+        """
+        # start at index 1 because we do not update the activations of the input layer.
+        # must update activations from furthest left to furthest right.
+        torch.cuda.synchronize()
+        tGPU.start()
+
+        debug.p('going ', 'GPU')
+        self._updateBiasRepr()
+        gpu_bias = self._biasTensorRepr.to(device)
+        for layIndex in range(1, len(self._layers)):
+            numPrevNeurons = len(self._layers[layIndex - 1])
+            weights = self._retrieveTensorWeights(layIndex)
+            activations = self._activationTensorRepr[layIndex - 1][0:numPrevNeurons]
+            # note that activation and bias have opposite dimensions, and are thus called accordingly
+
+            # must update the activations with sigmoid and bias in every layer
+            a_gpu = activations.to(device)
+            w_gpu = weights.to(device)
+
+            next_activations = torch.matmul(a_gpu, w_gpu)
+
+            # next_activations = next_activations + self._biasTensorRepr[layIndex]
+            next_activations = next_activations + gpu_bias[layIndex]
+            next_activations = torch.sigmoid(next_activations)
+
+            self._activationTensorRepr[layIndex] = next_activations
+
+        debug.p('activation in tensors: ', 'GPU')
+        debug.p(f'{self._activationTensorRepr}', 'GPU')
+
+        tGPU.end()
+        torch.cuda.synchronize()
+
+
+    def _retrieveTensorWeights(self, layerIndex: int) -> torch.tensor:
+        """
+        Takes a layer index, then creates a matrix representation of all weights of all connections
+        between this layer and previous layer.
+
+        Each column represents a single neuron's weights.
+        = pre-conditions =
+        CANNOT be called on input layer, as it has no previous connections
+
+        :param layerIndex:
+        :return:
+        """
+        numConnections = len(self._layers[layerIndex - 1])
+        numNeurons = len(self._layers[layerIndex])
+        returnTensor = torch.zeros(numConnections, numNeurons)
+        # print('---')
+        # print('num connections: ', numConnections)
+        # print('num neurons: ', numNeurons)
+        # print('return Tensor: ')
+        for neurIndex in range(numNeurons):
+            weightTensor = self._layers[layerIndex][neurIndex]._tensorReprWeights
+            # print(weightTensor)
+            # print(returnTensor[:, neurIndex])
+            # print(returnTensor)
+            # print()
+            returnTensor[:, neurIndex] = weightTensor
+        # print('row of connections: ')
+        # print(returnTensor)
+        return returnTensor
+
+    # def _calcOneLayerActivation(self, activations: torch.tensor, weights: torch.tensor, bias: torch.tensor) -> torch.tensor:
+    #     # Fully calculates the activation of a single neuron, given the previous layer's activations,
+    #     # weights of connections, and neuron's bias.
+    #     #
+    #     # = pre-condition =
+    #     #   - activations of previous layer are accurate
+    #     #
+    #     # :param activations: one row matrix, each entry describing corresponding activation of neuron.
+    #     # :param weights: one column matrix, each entry describing corresponding activation of neuron.
+    #     # :return: 1x1 tensor with the new activation of the neuron
+
+
     def _step(self, label: list[int]):
         """
         adjusts the weights & biases to reduce the cost function
@@ -394,6 +553,7 @@ class Network:
         = Pre-conditions =
         length of list matches number of output neurons
         """
+        tMisc.start()
         self._steps += 1
 
         # layer_index goes from last layer to first
@@ -532,6 +692,7 @@ class Network:
                             debug.p(f'addStepCost  : {round(cost_plus, COST_PRECISION)}')
                             debug.p(f'minusStepCost: {round(cost_minus, COST_PRECISION)} *')
                             debug.p()
+                        neuron.updateTensor()
 
                 debug.p()
                         # neuron._bias -= self.step_size
@@ -542,13 +703,17 @@ class Network:
         # print('*****')
 
         # determine if network is accurate or not
+        tMisc.end()
         self._updateNetwork()
+        self._runNetworkTensor()
+
 
         results = self._findAccuracy(label, ACCURACY_THRESHHOLD)
         if 0 in results:
             self._updateAccuracy(0)
         else:
             self._updateAccuracy(1)
+
 
     def _findAccuracy(self, label: list[int], threshhold: float):
         """
@@ -623,7 +788,6 @@ class Network:
                         con.changeColor(c)
                         con.drawOnScreen(screen)
 
-       # print()
 
 class Connection:
     """
@@ -676,6 +840,9 @@ class Connection:
     def updateWeight(self) -> None:
         """
         Updates the current weight to the value of the future weight
+
+        MUST BE CALLED BEFORE UPDATE BIAS IN NEURONS!
+        The weights must all be updated first.
         :return:
         """
         if self._futureWeight is not None:
@@ -705,6 +872,7 @@ class Connection:
                f"current Weight: {self._weight}\n" \
                f"future  Weight: {self._futureWeight}\n"
 
+
 class Neuron:
     """
     a single neuron in a neural network
@@ -722,6 +890,7 @@ class Neuron:
     _bias: amount required to have neuron become significantly activated
                 can be any real number
     _activation: how turned on this neuron is ;)
+    _tensorReprWeights: 1xN tensor with each entry corresponding to the weight of the pre-connection neuron
     """
     def __init__(self):
         self.x = 0
@@ -736,6 +905,22 @@ class Neuron:
         self._futureBias = None
         # self._activation = 0.75
         self._activation = 0
+
+    def buildTensor(self) -> None:
+        """
+        Creates a tensor representation of all weights connected to this neuron
+        :return:
+        """
+        self._tensorReprWeights = torch.zeros(1, len(self.preConnections))
+
+    def updateTensor(self) -> None:
+        """
+        reEvaluates the tensor and updates all values
+        :return:
+        """
+        for connectionIndex in range(len(self.preConnections)):
+            currCon = self.preConnections[connectionIndex]
+            self._tensorReprWeights[0, connectionIndex] = currCon._weight
 
     def addPreConnection(self, c) -> None:
         """adds the connection, c, to this neurons list of preConnections
@@ -829,11 +1014,13 @@ class Neuron:
 
     def updateBias(self) -> None:
         """
-        Updates the bias of the neuron to the future bias value
+        Updates the bias of the neuron to the future bias value.
+        Must be called AFTER all weights have been updated to their future values
         :return:
         """
         if self._futureBias is not None:
             self._bias = self._futureBias
+            self.updateTensor()
 
     def __str__(self):
         """
@@ -845,7 +1032,7 @@ class Neuron:
                # f"preCon: {self.preConnections} \n"
 
 
-c = Network(2, 1, 1, 2)
+c = Network(2, 1, 3, 40)
 i = 1
 
 data1 = [[[0, 0], [0]], [[1, 0], [1]], [[0, 1], [1]], [[1, 1], [0]]]
@@ -918,10 +1105,10 @@ def straightAcross() -> (Network, list[list[int, int]], list[list[int, int]]):
     Network that has data that should only work straight across
     :return:
     """
-    difficulty = 20
+    difficulty = 7
     # proportion_training = 1
     proportion_training = 0.8
-    c = Network(difficulty, difficulty, 0, difficulty)
+    c = Network(difficulty, difficulty, 1, difficulty)
     # c._layers[0][0]._bias = 0
     # c._layers[0][1]._bias = 0
     # c._layers[1][0]._bias = -1
@@ -980,7 +1167,7 @@ def superSimpleInverse() -> (Network, list[list[int, int]]):
 
 # c = xOR_primedNet()
 # c = xOR_solvedNet()
-c, data1, data2 = straightAcross()
+# c, data1, data2 = straightAcross()
 # c, data1 = superSimple()
 # c, data1 = superSimpleInverse()
 
@@ -1040,6 +1227,7 @@ while running:
             space = True
             tempPrintOut = debug.print_out
             debug.toggle_print(True)
+
         if event.type == pygame.KEYDOWN and event.key == pygame.K_t:
             tempPrintOut = debug.print_out
             debug.toggle_print(True)
@@ -1050,6 +1238,7 @@ while running:
 
             c._input(data1[dataIndex][0])
             c._runNetwork()
+            c._runNetworkTensor()
 
 
             debug.p(c._accuracy)
@@ -1100,7 +1289,7 @@ while running:
             pass
 
 
-        i += 0.01
+        i += 0.1
         if i >= 1.0:
             i -= 1
             debug.p(c._accuracy)
@@ -1112,12 +1301,18 @@ while running:
             textRect = text.get_rect()
             textRect.center = (SCREEN_X - 100, SCREEN_Y - 50)
 
+            debug.toggle_print(True)
+            print(f'CPU time: {tCPU.avgDuration()}')
+            print(f'GPU time: {tGPU.avgDuration()}')
+            print(f'misc time: {tMisc.avgDuration()}')
+            debug.toggle_print(False)
+
         space = False
 
         screen.fill(BACKGROUND)
-        c.drawOnScreen(screen, i)
-        screen.blit(text, textRect)
-        screen.blit(accText, accTextRect)
+        # c.drawOnScreen(screen, i)
+        # screen.blit(text, textRect)
+        # screen.blit(accText, accTextRect)
 
     debug.toggle_print(tempPrintOut)
 
